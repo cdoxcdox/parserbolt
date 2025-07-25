@@ -15,7 +15,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="https://github.com/your-username/telegram-parser.git"
+REPO_URL="https://github.com/cdoxcdox/parserbolt.git"
 APP_DIR="$HOME/telegram-parser"
 
 # Function to print colored output
