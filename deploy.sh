@@ -56,6 +56,9 @@ print_status "Detected OS: $OS $VER"
 # Update system
 print_status "Updating system packages..."
 if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
+    # Set non-interactive mode to avoid prompts
+    export DEBIAN_FRONTEND=noninteractive
+    
     sudo apt update && sudo apt upgrade -y
     sudo apt install -y curl wget git unzip software-properties-common apt-transport-https ca-certificates gnupg lsb-release
 elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]]; then
@@ -69,10 +72,19 @@ fi
 print_status "Installing Docker..."
 if ! command -v docker &> /dev/null; then
     if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
+        # Pre-configure docker.io to automatically restart daemon
+        echo 'docker.io docker.io/restart-docker boolean true' | sudo debconf-set-selections
+        
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
         sudo apt update
-        sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        
+        # Install Docker with automatic yes to all prompts
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        
+        # Ensure Docker service is started
+        sudo systemctl start docker
+        sudo systemctl enable docker
     elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]]; then
         sudo yum install -y yum-utils
         sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
@@ -83,6 +95,17 @@ if ! command -v docker &> /dev/null; then
     
     sudo usermod -aG docker $USER
     print_success "Docker installed successfully"
+    
+    # Wait for Docker to be ready
+    print_status "Waiting for Docker to be ready..."
+    sleep 5
+    
+    # Test Docker installation
+    if sudo docker run --rm hello-world > /dev/null 2>&1; then
+        print_success "Docker is working correctly"
+    else
+        print_warning "Docker test failed, but continuing..."
+    fi
 else
     print_success "Docker is already installed"
 fi
@@ -90,13 +113,25 @@ fi
 # Install Docker Compose (standalone version for compatibility)
 print_status "Installing Docker Compose..."
 if ! command -v docker-compose &> /dev/null; then
-    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    # Use fixed version to avoid API rate limits
+    DOCKER_COMPOSE_VERSION="v2.24.5"
+    print_status "Installing Docker Compose version $DOCKER_COMPOSE_VERSION"
+    
     sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
+    
+    # Create symlink for compatibility
+    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+    
     print_success "Docker Compose installed successfully"
 else
     print_success "Docker Compose is already installed"
 fi
+
+# Verify installations
+print_status "Verifying installations..."
+docker --version || print_error "Docker installation failed"
+docker-compose --version || print_error "Docker Compose installation failed"
 
 # Clone repository
 print_status "Cloning repository..."
@@ -105,12 +140,20 @@ if [ -d "$APP_DIR" ]; then
     mv "$APP_DIR" "${APP_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
 fi
 
-git clone "$REPO_URL" "$APP_DIR"
+# Clone with error handling
+if ! git clone "$REPO_URL" "$APP_DIR"; then
+    print_error "Failed to clone repository. Please check the URL and your internet connection."
+    exit 1
+fi
+
 cd "$APP_DIR"
 
 # Create necessary directories
 print_status "Creating application directories..."
 mkdir -p data logs sessions backups
+
+# Set proper permissions
+chmod 755 data logs sessions backups
 
 # Create .env file
 print_status "Creating environment configuration..."
