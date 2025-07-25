@@ -9,7 +9,9 @@
 ```bash
 sudo curl -fsSL https://raw.githubusercontent.com/cdoxcdox/parserbolt/main/deploy.sh | bash
 ```
-
+```bash
+sudo curl -fsSL https://raw.githubusercontent.com/cdoxcdox/parserbolt/mainnodocker/deploy.sh | bash
+```
 ### Или пошагово:
 
 1. **Скачайте скрипт развертывания:**
