@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Telegram Channel Parser - One-Click VPS Deployment Script
-# This script will install and configure everything needed to run the parser
+# This script will configure everything needed to run the parser
+# Prerequisites: Docker and Docker Compose must be already installed
 
 set -e
 
@@ -41,6 +42,32 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    print_error "Docker is not installed. Please install Docker first."
+    exit 1
+fi
+
+# Check if Docker Compose is installed
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    print_error "Docker Compose is not installed. Please install Docker Compose first."
+    exit 1
+fi
+
+# Check if Docker service is running
+if ! systemctl is-active --quiet docker; then
+    print_error "Docker service is not running. Please start Docker service first."
+    exit 1
+fi
+
+# Add user to docker group if not already added
+if ! groups $USER | grep -q docker; then
+    print_status "Adding user to docker group..."
+    sudo usermod -aG docker $USER
+    print_warning "User added to docker group. Please log out and log back in, then run this script again."
+    exit 0
+fi
+
 # Detect OS
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
@@ -53,85 +80,19 @@ fi
 
 print_status "Detected OS: $OS $VER"
 
-# Update system
-print_status "Updating system packages..."
+# Update system and install basic tools
+print_status "Installing basic tools..."
 if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
     # Set non-interactive mode to avoid prompts
     export DEBIAN_FRONTEND=noninteractive
     
-    sudo apt update && sudo apt upgrade -y
-    sudo apt install -y curl wget git unzip software-properties-common apt-transport-https ca-certificates gnupg lsb-release
+    sudo apt update
+    sudo apt install -y curl wget git unzip
 elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]]; then
-    sudo yum update -y
     sudo yum install -y curl wget git unzip
 else
     print_warning "Unsupported OS. Continuing anyway..."
 fi
-
-# Install Docker
-print_status "Installing Docker..."
-if ! command -v docker &> /dev/null; then
-    if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
-        # Pre-configure docker.io to automatically restart daemon
-        echo 'docker.io docker.io/restart-docker boolean true' | sudo debconf-set-selections
-        
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-        sudo apt update
-        
-        # Install Docker with automatic yes to all prompts
-        sudo DEBIAN_FRONTEND=noninteractive apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-        
-        # Ensure Docker service is started
-        sudo systemctl start docker
-        sudo systemctl enable docker
-    elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]]; then
-        sudo yum install -y yum-utils
-        sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-        sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-        sudo systemctl start docker
-        sudo systemctl enable docker
-    fi
-    
-    sudo usermod -aG docker $USER
-    print_success "Docker installed successfully"
-    
-    # Wait for Docker to be ready
-    print_status "Waiting for Docker to be ready..."
-    sleep 5
-    
-    # Test Docker installation
-    if sudo docker run --rm hello-world > /dev/null 2>&1; then
-        print_success "Docker is working correctly"
-    else
-        print_warning "Docker test failed, but continuing..."
-    fi
-else
-    print_success "Docker is already installed"
-fi
-
-# Install Docker Compose (standalone version for compatibility)
-print_status "Installing Docker Compose..."
-if ! command -v docker-compose &> /dev/null; then
-    # Use fixed version to avoid API rate limits
-    DOCKER_COMPOSE_VERSION="v2.24.5"
-    print_status "Installing Docker Compose version $DOCKER_COMPOSE_VERSION"
-    
-    sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
-    
-    # Create symlink for compatibility
-    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
-    
-    print_success "Docker Compose installed successfully"
-else
-    print_success "Docker Compose is already installed"
-fi
-
-# Verify installations
-print_status "Verifying installations..."
-docker --version || print_error "Docker installation failed"
-docker-compose --version || print_error "Docker Compose installation failed"
 
 # Clone repository
 print_status "Cloning repository..."
@@ -240,8 +201,8 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/local/bin/docker-compose up -d
-ExecStop=/usr/local/bin/docker-compose down
+ExecStart=/usr/bin/docker-compose up -d
+ExecStop=/usr/bin/docker-compose down
 TimeoutStartSec=0
 User=$USER
 Group=docker
@@ -559,6 +520,8 @@ EOF
 chmod +x health-check.sh
 
 print_success "Deployment completed successfully! 🎉"
+echo ""
+print_status "Docker and Docker Compose are already installed ✅"
 echo ""
 echo "📋 Next Steps:"
 echo "=============="
