@@ -7,7 +7,7 @@
 ### Одной командой:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cdoxcdox/parserbolt/main/deploy.sh | bash
+sudo curl -fsSL https://raw.githubusercontent.com/cdoxcdox/parserbolt/main/deploy.sh | bash
 ```
 
 ### Или пошагово:
