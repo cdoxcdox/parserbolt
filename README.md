@@ -7,14 +7,14 @@
 ### Одной командой:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-repo/telegram-parser/main/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cdoxcdox/parserbolt/main/deploy.sh | bash
 ```
 
 ### Или пошагово:
 
 1. **Скачайте скрипт развертывания:**
 ```bash
-wget https://raw.githubusercontent.com/your-repo/telegram-parser/main/deploy.sh
+wget https://raw.githubusercontent.com/cdoxcdox/parserbolt/main/deploy.sh
 chmod +x deploy.sh
 ```
 
